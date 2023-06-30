@@ -1,4 +1,4 @@
-FROM node:14-slim
+FROM node:20-slim AS node_base
 
 # Install Puppeteer dependencies: https://github.com/GoogleChrome/puppeteer/blob/master/docs/troubleshooting.md#chrome-headless-doesnt-launch
 RUN apt-get update \
@@ -44,11 +44,17 @@ RUN apt-get update \
    && apt-get -q -y clean \
    && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
+# Build the repo itself as part of the Docker build
+FROM node_base AS repo_build
+COPY . /aws-azure-login/
+WORKDIR /aws-azure-login
+RUN yarn install && yarn build
+
+# Install the production version to the end image and copy the locally built stuff from BUILD
+FROM node_base
 COPY package.json yarn.lock /aws-azure-login/
-
-RUN cd /aws-azure-login \
-   && yarn install --production
-
-COPY lib /aws-azure-login/lib
+WORKDIR /aws-azure-login
+RUN yarn install --production
+COPY --from=repo_build /aws-azure-login/lib /aws-azure-login/lib
 
 ENTRYPOINT ["node", "/aws-azure-login/lib", "--no-sandbox"]
